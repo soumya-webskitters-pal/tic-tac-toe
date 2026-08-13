@@ -1,0 +1,3 @@
+import GameBoard from './GameBoard'
+import ScoreBoard from './ScoreBoard'
+export default function GameArena({ game, onNewMatch }) { return <div className="arena"><div className="arena-toolbar"><button className="hint-trigger" onClick={game.showHint} disabled={game.thinking || game.result || (game.mode === 'ai' && game.turn === 'O')} title="Suggest the best move"><span className="bulb-icon">💡</span> HINT</button><button className="setup-trigger" onClick={onNewMatch}>⚙ <span>NEW MATCH</span></button></div><div className="status-row"><span className={`pulse ${game.turn.toLowerCase()}`} /><strong>{game.status}</strong><small>{game.result ? 'ROUND COMPLETE' : `${game.size} × ${game.size} GRID`}</small></div><GameBoard game={game}/><ScoreBoard game={game}/></div> }
