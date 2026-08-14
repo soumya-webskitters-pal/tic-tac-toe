@@ -11,6 +11,7 @@ main { min-height: 100vh; position: relative; overflow: hidden; background: radi
 .a1 { left:-250px; top:250px; }.a2 { right:-280px; top:480px; opacity:.09; }
 header { height: 76px; max-width: 1240px; margin: auto; padding: 0 28px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,.07); position:relative; z-index:2; }
 .brand { display:flex; align-items:center; gap:13px; text-decoration:none; color:#fff; font:700 16px Manrope; letter-spacing:2px; }
+.brand-logo { width:32px; height:32px; object-fit:contain; display:block; }
 .brand b { color:var(--accent); }.brand-cube { width:25px;height:25px; transform:rotate(30deg) skew(-4deg); border:1px solid rgba(var(--accent-rgb),.8); border-radius:5px; box-shadow:0 0 18px rgba(var(--accent-rgb),.4),inset 0 0 12px rgba(var(--accent-rgb),.2); position:relative; }
 .brand-cube:after,.brand-cube:before { content:'';position:absolute;background:var(--accent);opacity:.5 }.brand-cube:after{width:1px;height:100%;left:50%}.brand-cube:before{height:1px;width:100%;top:50%}
 .header-actions,.theme-picker { display:flex;align-items:center;gap:10px }.online { font:600 9px Manrope;letter-spacing:1.4px;color:#767789;margin-right:16px }.online i { display:inline-block;width:5px;height:5px;background:#34d399;border-radius:50%;box-shadow:0 0 8px #34d399;margin-right:7px }
