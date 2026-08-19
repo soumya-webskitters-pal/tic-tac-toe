@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Peer } from 'peerjs'
 import { getEasyMove, getHardMove } from '../game/aiPlayer'
 import { createBoard, getOutcome } from '../game/gameLogic'
+import { trackEvent } from '../analytics'
 
-export function useGame() {
+export function useGame(localGamingName = 'Alex') {
   const initialStarter = useRef(Math.random() < .5 ? 'X' : 'O')
   const [size, setSize] = useState(3)
   const [mode, setMode] = useState('ai')
@@ -23,19 +24,22 @@ export function useGame() {
   const [retryAttempt, setRetryAttempt] = useState(0)
   const [networkQuality, setNetworkQuality] = useState('good')
   const [forfeitWinner, setForfeitWinner] = useState(null)
+  const [forfeitReason, setForfeitReason] = useState('disconnect')
   const [receivedReaction, setReceivedReaction] = useState(null)
   const [receivedMessage, setReceivedMessage] = useState(null)
+  const [gameHistory, setGameHistory] = useState(() => { try { return JSON.parse(localStorage.getItem('nexus-game-history'))||[] } catch { return [] } })
   const scoredRef = useRef(false)
-  const peerRef = useRef(null), connectionRef = useRef(null), boardRef = useRef(board), turnRef = useRef(turn), sizeRef = useRef(size), playerSymbolRef = useRef(playerSymbol), roundStarterRef = useRef(roundStarter), localReadyRef = useRef(false), remoteReadyRef = useRef(false), isHostRef = useRef(false), remotePeerRef = useRef(''), retryTimerRef = useRef(null), retryCountRef = useRef(0), playingRef = useRef(false), resettingOnlineRef = useRef(false), lastMessageAtRef = useRef(0)
-  const result = useMemo(() => forfeitWinner ? { winner:forfeitWinner, reason:'disconnect' } : getOutcome(board, size), [board, size, forfeitWinner])
+  const peerRef = useRef(null), connectionRef = useRef(null), boardRef = useRef(board), turnRef = useRef(turn), sizeRef = useRef(size), playerSymbolRef = useRef(playerSymbol), roundStarterRef = useRef(roundStarter), localNameRef = useRef(localGamingName), localReadyRef = useRef(false), remoteReadyRef = useRef(false), isHostRef = useRef(false), remotePeerRef = useRef(''), retryTimerRef = useRef(null), retryCountRef = useRef(0), playingRef = useRef(false), resettingOnlineRef = useRef(false), lastMessageAtRef = useRef(0)
+  const result = useMemo(() => forfeitWinner ? { winner:forfeitWinner, reason:forfeitReason } : getOutcome(board, size), [board, size, forfeitWinner, forfeitReason])
   const aiSymbol = playerSymbol === 'X' ? 'O' : 'X'
-  useEffect(() => { boardRef.current=board; turnRef.current=turn; sizeRef.current=size; playerSymbolRef.current=playerSymbol; roundStarterRef.current=roundStarter }, [board,turn,size,playerSymbol,roundStarter])
+  useEffect(() => { boardRef.current=board; turnRef.current=turn; sizeRef.current=size; playerSymbolRef.current=playerSymbol; roundStarterRef.current=roundStarter; localNameRef.current=localGamingName }, [board,turn,size,playerSymbol,roundStarter,localGamingName])
+  useEffect(() => localStorage.setItem('nexus-game-history',JSON.stringify(gameHistory)),[gameHistory])
   useEffect(() => () => { clearInterval(retryTimerRef.current); peerRef.current?.destroy() }, [])
 
   const finishReconnectFailure = () => {
     clearInterval(retryTimerRef.current); retryTimerRef.current=null; setOnlineStatus('failed')
     const local = playerSymbolRef.current, opponent = local === 'X' ? 'O' : 'X'
-    setForfeitWinner(navigator.onLine ? local : opponent)
+    setForfeitReason('disconnect'); setForfeitWinner(navigator.onLine ? local : opponent); trackEvent('online_connection_failed',{retry_attempts:5,game_mode:'online'})
   }
   const reconnect = () => {
     if (resettingOnlineRef.current || retryTimerRef.current) return
@@ -50,9 +54,10 @@ export function useGame() {
     attempt(); retryTimerRef.current=setInterval(attempt, 2500)
   }
 
-  const startOnlineGame = ({ symbol, starter, gridSize }) => {
+  const startOnlineGame = ({ symbol, starter, gridSize, hostName }) => {
     setPlayerSymbolState(symbol); setSize(gridSize); setBoard(createBoard(gridSize)); setRoundStarter(starter); setTurn(starter); setGameStarted(true); setLastMove(null); setHintIndex(null); setOnlineStatus('connected'); scoredRef.current=false
-    setNames(symbol === 'X' ? { X:'You', O:'Friend' } : { X:'Friend', O:'You' })
+    setNames(symbol === 'X' ? { X:localNameRef.current, O:'Friend' } : { X:hostName||'Friend', O:localNameRef.current })
+    if (symbol === 'O') connectionRef.current?.send({ type:'profile', name:localNameRef.current })
   }
   const wireConnection = (connection, isHost, restoring=false) => {
     connectionRef.current = connection
@@ -64,7 +69,7 @@ export function useGame() {
       if (!isHost) return
       const starter = Math.random() < .5 ? 'X' : 'O'
       startOnlineGame({ symbol:'X', starter, gridSize:size })
-      connection.send({ type:'start', symbol:'O', starter, gridSize:size })
+      connection.send({ type:'start', symbol:'O', starter, gridSize:size, hostName:localNameRef.current })
     })
     connection.on('data', data => {
       if (data.type === 'start') startOnlineGame(data)
@@ -85,6 +90,8 @@ export function useGame() {
         const text=data.text.replace(/[\u0000-\u001F\u007F]/g,'').trim().slice(0,80)
         if (text) setReceivedMessage({ text, id:`${Date.now()}-${Math.random()}` })
       }
+      if (data.type === 'forfeit' && (data.winner === 'X' || data.winner === 'O')) { resettingOnlineRef.current=true; setBoard(createBoard(sizeRef.current)); setLastMove(null); setHintIndex(null); setForfeitReason('quit'); setForfeitWinner(data.winner); setOnlineStatus('ended') }
+      if (data.type === 'profile' && typeof data.name === 'string') { const name=data.name.replace(/[\u0000-\u001F\u007F]/g,'').trim().slice(0,18); if(name)setNames(current=>({...current,[playerSymbolRef.current==='X'?'O':'X']:name})) }
     })
     connection.on('close', reconnect)
     connection.on('error', reconnect)
@@ -126,7 +133,15 @@ export function useGame() {
     resettingOnlineRef.current=true; clearInterval(retryTimerRef.current); retryTimerRef.current=null
     connectionRef.current?.close(); peerRef.current?.destroy(); connectionRef.current=null; peerRef.current=null
     localReadyRef.current=false; remoteReadyRef.current=false; playingRef.current=false; remotePeerRef.current=''; retryCountRef.current=0
-    setRoomCode(''); setOnlineStatus('idle'); setRetryAttempt(0); setNetworkQuality('good'); setForfeitWinner(null); setGameStarted(false); setMode('ai')
+    setRoomCode(''); setOnlineStatus('idle'); setRetryAttempt(0); setNetworkQuality('good'); setForfeitWinner(null); setForfeitReason('disconnect'); setBoard(createBoard(size)); setTurn(roundStarter); setLastMove(null); setHintIndex(null); setScore({ X:0,O:0,draw:0 }); scoredRef.current=false; setGameStarted(true); setMode('ai')
+  }
+  const exitOnline = () => {
+    if (mode !== 'online') return
+    const winner=playerSymbol === 'X' ? 'O' : 'X'
+    resettingOnlineRef.current=true; connectionRef.current?.send({ type:'forfeit', winner }); trackEvent('online_game_quit',{game_mode:'online',quit_result:'loss'})
+    setGameHistory(history=>[{ id:Date.now(), winner, reason:'quit', mode:'online', x:names.X, o:names.O, playedAt:new Date().toLocaleString() },...history].slice(0,20))
+    setRoomCode(''); setOnlineStatus('idle'); setRetryAttempt(0); setForfeitWinner(null); setBoard(createBoard(size)); setTurn(roundStarter); setLastMove(null); setHintIndex(null); setScore({ X:0,O:0,draw:0 }); scoredRef.current=false; setGameStarted(true); setMode('ai')
+    setTimeout(() => { connectionRef.current?.close(); peerRef.current?.destroy(); connectionRef.current=null; peerRef.current=null },250)
   }
 
   useEffect(() => {
@@ -165,8 +180,13 @@ export function useGame() {
     return { ...n, [aiSymbol]: n[aiSymbol] === 'Nexus AI' ? 'Player 2' : n[aiSymbol] }
   }), [mode, playerSymbol, aiSymbol])
   useEffect(() => {
-    if (result && !scoredRef.current) { scoredRef.current = true; setScore(s => ({ ...s, [result.winner]: s[result.winner] + 1 })) }
-  }, [result])
+    if (result && !scoredRef.current) {
+      scoredRef.current=true; setScore(s=>({ ...s,[result.winner]:s[result.winner]+1 }))
+      setGameHistory(history=>[{ id:Date.now(), winner:result.winner, reason:result.reason||'line', mode, x:names.X, o:names.O, playedAt:new Date().toLocaleString() },...history].slice(0,20))
+      trackEvent('game_complete',{game_mode:mode,result:result.winner==='draw'?'draw':result.winner===playerSymbol?'win':'loss',finish_reason:result.reason||'line',grid_size:size})
+    }
+  }, [result,mode,names])
+  useEffect(()=>{trackEvent('game_mode_selected',{game_mode:mode})},[mode])
   useEffect(() => {
     if (!gameStarted || mode !== 'ai' || turn !== aiSymbol || result) return
     setThinking(true)
@@ -203,5 +223,5 @@ export function useGame() {
   }
   const status = onlineStatus === 'reconnecting' ? `Connection lost · retry ${Math.min(retryAttempt,5)}/5` : result?.winner === 'draw' ? 'A strategic draw' : result ? `${names[result.winner]} wins!` : thinking ? `${names[aiSymbol]} is thinking…` : `${names[turn]}'s turn`
 
-  return { size, setSize, mode, setMode, difficulty, setDifficulty, playerSymbol, setPlayerSymbol, aiSymbol, names, rename, board, turn, roundStarter, thinking, score, lastMove, hintIndex, result, status, onlineStatus, retryAttempt, networkQuality, roomCode, receivedReaction, receivedMessage, hostOnline, joinOnline, readyOnline, resetOnline, sendReaction, sendChat, playHumanMove, showHint, resetRound, newMatch }
+  return { size, setSize, mode, setMode, difficulty, setDifficulty, playerSymbol, setPlayerSymbol, aiSymbol, names, rename, board, turn, roundStarter, thinking, score, lastMove, hintIndex, result, status, onlineStatus, retryAttempt, networkQuality, roomCode, receivedReaction, receivedMessage, gameHistory, hostOnline, joinOnline, readyOnline, resetOnline, exitOnline, sendReaction, sendChat, playHumanMove, showHint, resetRound, newMatch }
 }

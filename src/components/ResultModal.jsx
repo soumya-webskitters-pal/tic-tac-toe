@@ -8,8 +8,9 @@ export default function ResultModal({ game, onNewMatch }) {
   const draw = result.winner === 'draw'
   const aiWon = mode === 'ai' && result.winner === game.aiSymbol
   const humanWon = mode === 'ai' && result.winner === game.playerSymbol
+  const opponentQuit = mode === 'online' && result.reason === 'quit'
   const title = draw ? 'Draw!' : aiWon ? 'AI wins' : humanWon ? 'You win!' : `${names[result.winner]} wins!`
-  const copy = result.reason === 'disconnect' ? `${names[result.winner]} wins because the other player went offline after five reconnect attempts.` : draw ? 'Perfectly balanced. Neither side gave an inch.' : aiWon ? 'Nexus found the winning line. Ready for a rematch?' : humanWon ? 'Brilliant strategy. You outplayed the machine.' : `${names[result.winner]} takes this round with a flawless line.`
+  const copy = result.reason === 'quit' ? `${names[result.winner]} wins because the other player left the match.` : result.reason === 'disconnect' ? `${names[result.winner]} wins because the other player went offline after five reconnect attempts.` : draw ? 'Perfectly balanced. Neither side gave an inch.' : aiWon ? 'Nexus found the winning line. Ready for a rematch?' : humanWon ? 'Brilliant strategy. You outplayed the machine.' : `${names[result.winner]} takes this round with a flawless line.`
   return <div className="modal-backdrop result-backdrop">
     {!draw && <div className="confetti" aria-hidden="true">{CONFETTI.map((piece, i) => <i key={i} style={{ '--left':piece.left,'--delay':piece.delay,'--duration':piece.duration,'--color':piece.color,'--rotate':piece.rotate }} />)}</div>}
     <section className={`modal-card result-modal glass ${draw ? 'is-draw' : ''}`} role="dialog" aria-modal="true" aria-labelledby="result-title">
@@ -17,8 +18,8 @@ export default function ResultModal({ game, onNewMatch }) {
       <div className="modal-kicker">{draw ? 'ROUND COMPLETE' : 'VICTORY CONFIRMED'}</div>
       <h2 id="result-title">{title}</h2><p className="modal-copy">{copy}</p>
       <div className="result-score"><span>{names.X}<b>{game.score.X}</b></span><i>—</i><span><b>{game.score.O}</b>{names.O}</span></div>
-      <button className="result-primary" onClick={() => resetRound()}>PLAY NEXT ROUND <span>→</span></button>
-      <button className="result-secondary" onClick={onNewMatch}>⚙ NEW MATCH & SETTINGS</button>
+      {opponentQuit ? <button className="result-primary" onClick={game.resetOnline}>EXIT <span>→</span></button> : <button className="result-primary" onClick={() => resetRound()}>PLAY NEXT ROUND <span>→</span></button>}
+      {!opponentQuit && <button className="result-secondary" onClick={onNewMatch}>⚙ NEW MATCH & SETTINGS</button>}
     </section>
   </div>
 }

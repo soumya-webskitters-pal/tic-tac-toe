@@ -3,7 +3,7 @@ import EditableName from './EditableName'
 import Icon from './Icon'
 import OnlineLobby from './OnlineLobby'
 
-export default function GameControls({ game, onStart }) {
+export default function GameControls({ game, profile, onStart }) {
   const { mode,setMode,difficulty,setDifficulty,size,setSize,playerSymbol,setPlayerSymbol,names,rename,newMatch } = game
   const joinedFromLink = useRef(false)
   useEffect(() => {
@@ -17,7 +17,7 @@ export default function GameControls({ game, onStart }) {
     {mode==='online' ? <div className="control-section appear"><label>LIVE ROOM</label><OnlineLobby game={game} onReady={onStart}/></div> : <>
       <div className="control-section"><label>{mode==='ai'?'CHOOSE YOUR MARK':'PLAYER ONE MARK'}</label><div className="symbol-choice"><button className={playerSymbol==='X'?'selected x':'x'} onClick={()=>setPlayerSymbol('X')}><b>X</b><span>PLAY AS X</span></button><button className={playerSymbol==='O'?'selected o':'o'} onClick={()=>setPlayerSymbol('O')}><b>O</b><span>PLAY AS O</span></button></div><p className="hint random-start">✦ The first round starts randomly; opening turns alternate after that.</p></div>
       {mode==='ai'&&<div className="control-section appear"><label>AI INTELLIGENCE</label><div className="difficulty-cards"><button className={difficulty==='easy'?'selected':''} onClick={()=>setDifficulty('easy')}><span>CASUAL</span><small>Relaxed & unpredictable</small><i/></button><button className={difficulty==='hard'?'selected':''} onClick={()=>setDifficulty('hard')}><span>TACTICAL <b>PRO</b></span><small>Calculates the best move</small><i/></button></div></div>}
-      <div className="control-section"><label>GRID SIZE</label><div className="size-row">{[3,4,5,6].map(n=><button key={n} className={size===n?'selected':''} onClick={()=>setSize(n)}>{n}×{n}</button>)}</div><p className="hint">Connect {size===3?3:4} marks in a row to win.</p></div><div className="players"><EditableName value={names.X} symbol="X" onChange={v=>rename('X',v)}/><div className="versus">VS</div><EditableName value={names.O} symbol="O" muted={mode==='ai'} onChange={v=>rename('O',v)}/></div><button className="new-game" onClick={()=>{newMatch();onStart()}}><span>✦</span> START NEW MATCH</button>
+      <div className="control-section"><label>GRID SIZE</label><div className="size-row">{[3,4,5,6].map(n=><button key={n} className={size===n?'selected':''} onClick={()=>setSize(n)}>{n}×{n}</button>)}</div><p className="hint">Connect {size===3?3:4} marks in a row to win.</p></div><div className="players"><EditableName value={names.X} symbol="X" avatar={playerSymbol==='X'?profile?.avatar:null} editable={playerSymbol!=='X'} onChange={v=>rename('X',v)}/><div className="versus">VS</div><EditableName value={names.O} symbol="O" avatar={playerSymbol==='O'?profile?.avatar:null} editable={playerSymbol!=='O'} muted={mode==='ai'} onChange={v=>rename('O',v)}/></div><button className="new-game" onClick={()=>{newMatch();onStart()}}><span>✦</span> START NEW MATCH</button>
     </>}
   </div>
 }
