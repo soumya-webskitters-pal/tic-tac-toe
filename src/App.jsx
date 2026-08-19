@@ -21,5 +21,6 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [game.result])
 
-  return <main style={{ '--accent':theme.value, '--accent-rgb':theme.rgb }}><div className="aurora a1"/><div className="aurora a2"/><div className="noise"/><Header themes={THEMES} theme={theme} onThemeChange={setTheme}/><Hero/><section className="game-shell"><GameArena game={game} onNewMatch={() => setSetupOpen(true)}/></section><Footer/>{setupOpen && <MatchSetupModal game={game} onClose={() => setSetupOpen(false)}/>} {!setupOpen && showResult && <ResultModal game={game} onNewMatch={() => setSetupOpen(true)}/>}</main>
+  const openFriends = () => { game.setMode('online'); setSetupOpen(true) }
+  return <main style={{ '--accent':theme.value, '--accent-rgb':theme.rgb }}><div className="aurora a1"/><div className="aurora a2"/><div className="noise"/><Header themes={THEMES} theme={theme} onThemeChange={setTheme}/><Hero/><section className="game-shell"><GameArena game={game} onNewMatch={() => setSetupOpen(true)} onPlayFriends={openFriends}/></section><Footer/>{setupOpen && <MatchSetupModal game={game} onClose={() => setSetupOpen(false)}/>} {!setupOpen && showResult && <ResultModal game={game} onNewMatch={() => setSetupOpen(true)}/>}</main>
 }

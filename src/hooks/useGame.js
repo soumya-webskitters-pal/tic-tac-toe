@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Peer } from 'peerjs'
 import { getEasyMove, getHardMove } from '../game/aiPlayer'
 import { createBoard, getOutcome } from '../game/gameLogic'
 
@@ -17,13 +18,109 @@ export function useGame() {
   const [score, setScore] = useState({ X: 0, O: 0, draw: 0 })
   const [lastMove, setLastMove] = useState(null)
   const [hintIndex, setHintIndex] = useState(null)
+  const [onlineStatus, setOnlineStatus] = useState('idle')
+  const [roomCode, setRoomCode] = useState('')
+  const [retryAttempt, setRetryAttempt] = useState(0)
+  const [networkQuality, setNetworkQuality] = useState('good')
+  const [forfeitWinner, setForfeitWinner] = useState(null)
   const scoredRef = useRef(false)
-  const result = useMemo(() => getOutcome(board, size), [board, size])
+  const peerRef = useRef(null), connectionRef = useRef(null), boardRef = useRef(board), turnRef = useRef(turn), sizeRef = useRef(size), playerSymbolRef = useRef(playerSymbol), roundStarterRef = useRef(roundStarter), localReadyRef = useRef(false), remoteReadyRef = useRef(false), isHostRef = useRef(false), remotePeerRef = useRef(''), retryTimerRef = useRef(null), retryCountRef = useRef(0), playingRef = useRef(false)
+  const result = useMemo(() => forfeitWinner ? { winner:forfeitWinner, reason:'disconnect' } : getOutcome(board, size), [board, size, forfeitWinner])
   const aiSymbol = playerSymbol === 'X' ? 'O' : 'X'
+  useEffect(() => { boardRef.current=board; turnRef.current=turn; sizeRef.current=size; playerSymbolRef.current=playerSymbol; roundStarterRef.current=roundStarter }, [board,turn,size,playerSymbol,roundStarter])
+  useEffect(() => () => { clearInterval(retryTimerRef.current); peerRef.current?.destroy() }, [])
+
+  const finishReconnectFailure = () => {
+    clearInterval(retryTimerRef.current); retryTimerRef.current=null; setOnlineStatus('failed')
+    const local = playerSymbolRef.current, opponent = local === 'X' ? 'O' : 'X'
+    setForfeitWinner(navigator.onLine ? local : opponent)
+  }
+  const reconnect = () => {
+    if (retryTimerRef.current) return
+    setOnlineStatus('reconnecting'); retryCountRef.current=0; setRetryAttempt(0)
+    const attempt = () => {
+      retryCountRef.current += 1; setRetryAttempt(retryCountRef.current)
+      if (retryCountRef.current > 5) { finishReconnectFailure(); return }
+      const target = remotePeerRef.current
+      if (peerRef.current?.disconnected && !peerRef.current.destroyed) peerRef.current.reconnect()
+      if (peerRef.current?.open && target) wireConnection(peerRef.current.connect(target, { reliable:true }), isHostRef.current, true)
+    }
+    attempt(); retryTimerRef.current=setInterval(attempt, 2500)
+  }
+
+  const startOnlineGame = ({ symbol, starter, gridSize }) => {
+    setPlayerSymbolState(symbol); setSize(gridSize); setBoard(createBoard(gridSize)); setRoundStarter(starter); setTurn(starter); setGameStarted(true); setLastMove(null); setHintIndex(null); setOnlineStatus('connected'); scoredRef.current=false
+    setNames(symbol === 'X' ? { X:'You', O:'Friend' } : { X:'Friend', O:'You' })
+  }
+  const wireConnection = (connection, isHost, restoring=false) => {
+    connectionRef.current = connection
+    connection.on('open', () => {
+      remotePeerRef.current=connection.peer; clearInterval(retryTimerRef.current); retryTimerRef.current=null; retryCountRef.current=0; setRetryAttempt(0)
+      if (restoring || playingRef.current) {
+        setOnlineStatus('playing'); connection.send({ type:'sync', board:boardRef.current, turn:turnRef.current, gridSize:sizeRef.current, starter:roundStarterRef.current }); return
+      }
+      if (!isHost) return
+      const starter = Math.random() < .5 ? 'X' : 'O'
+      startOnlineGame({ symbol:'X', starter, gridSize:size })
+      connection.send({ type:'start', symbol:'O', starter, gridSize:size })
+    })
+    connection.on('data', data => {
+      if (data.type === 'start') startOnlineGame(data)
+      if (data.type === 'move' && !boardRef.current[data.index]) {
+        setBoard(current => { const next=[...current]; next[data.index]=data.symbol; return next })
+        setLastMove(data.index); setHintIndex(null); setTurn(data.symbol === 'X' ? 'O' : 'X')
+      }
+      if (data.type === 'reset') {
+        setBoard(createBoard(data.gridSize)); setRoundStarter(data.starter); setTurn(data.starter); setLastMove(null); setHintIndex(null); scoredRef.current=false
+      }
+      if (data.type === 'ready') {
+        remoteReadyRef.current=true
+        if (localReadyRef.current) { playingRef.current=true; setOnlineStatus('playing') }
+      }
+      if (data.type === 'sync') { setBoard(data.board); setTurn(data.turn); setSize(data.gridSize); setRoundStarter(data.starter); setOnlineStatus('playing'); playingRef.current=true }
+    })
+    connection.on('close', reconnect)
+    connection.on('error', reconnect)
+  }
+  const hostOnline = () => {
+    peerRef.current?.destroy()
+    localReadyRef.current=false; remoteReadyRef.current=false; playingRef.current=false; isHostRef.current=true; setForfeitWinner(null)
+    const code = `nexus-${Math.random().toString(36).slice(2,8)}`
+    const peer = new Peer(code); peerRef.current=peer; setRoomCode(code); setOnlineStatus('creating')
+    peer.on('open', () => setOnlineStatus('waiting'))
+    peer.on('connection', connection => wireConnection(connection, true))
+    peer.on('disconnected', reconnect)
+    peer.on('error', () => setOnlineStatus('error'))
+  }
+  const joinOnline = code => {
+    const clean=code.trim().toLowerCase(); if (!clean) return
+    localReadyRef.current=false; remoteReadyRef.current=false; playingRef.current=false; isHostRef.current=false; setForfeitWinner(null)
+    peerRef.current?.destroy(); const peer=new Peer(); peerRef.current=peer; setRoomCode(clean); setOnlineStatus('joining')
+    peer.on('open', () => wireConnection(peer.connect(clean, { reliable:true }), false))
+    peer.on('disconnected', reconnect)
+    peer.on('error', () => setOnlineStatus('error'))
+  }
+  const readyOnline = () => {
+    localReadyRef.current=true; connectionRef.current?.send({ type:'ready' })
+    if (remoteReadyRef.current) playingRef.current=true
+    setOnlineStatus(remoteReadyRef.current ? 'playing' : 'ready-wait')
+  }
+
+  useEffect(() => {
+    if (mode !== 'online' || onlineStatus !== 'playing') return
+    const timer=setInterval(async () => {
+      const pc=connectionRef.current?.peerConnection; if (!pc) return
+      let rtt=0, lost=0
+      for (const report of (await pc.getStats()).values()) { if (report.type==='candidate-pair'&&report.state==='succeeded') rtt=report.currentRoundTripTime||0; if (report.type==='inbound-rtp') lost+=report.packetsLost||0 }
+      setNetworkQuality(!navigator.onLine||rtt>.45||lost>20?'weak':rtt>.2||lost>5?'fair':'good')
+    }, 2000)
+    return () => clearInterval(timer)
+  }, [mode,onlineStatus])
 
   const resetRound = useCallback((nextSize = size) => {
-    setBoard(createBoard(nextSize)); setRoundStarter(current => { const next = current === 'X' ? 'O' : 'X'; setTurn(next); return next }); setThinking(false); setLastMove(null); setHintIndex(null); scoredRef.current = false
-  }, [size])
+    if (mode === 'online' && playerSymbol !== 'X') return
+    setBoard(createBoard(nextSize)); setRoundStarter(current => { const next = current === 'X' ? 'O' : 'X'; setTurn(next); if (mode === 'online') connectionRef.current?.send({ type:'reset', starter:next, gridSize:nextSize }); return next }); setThinking(false); setLastMove(null); setHintIndex(null); scoredRef.current = false
+  }, [size, mode, playerSymbol])
 
   useEffect(() => { setBoard(createBoard(size)); setTurn(roundStarter); setThinking(false); setLastMove(null); setHintIndex(null); scoredRef.current = false }, [size, mode, difficulty, playerSymbol])
   useEffect(() => setNames(n => {
@@ -49,8 +146,9 @@ export function useGame() {
   }, [turn, mode, difficulty, board, size, result, aiSymbol, playerSymbol, gameStarted])
 
   const playHumanMove = index => {
-    if (!gameStarted || board[index] || result || thinking || (mode === 'ai' && turn === aiSymbol)) return
+    if (!gameStarted || board[index] || result || thinking || (mode === 'ai' && turn === aiSymbol) || (mode === 'online' && (turn !== playerSymbol || onlineStatus !== 'playing'))) return
     setBoard(current => { const next = [...current]; next[index] = turn; return next })
+    if (mode === 'online') connectionRef.current?.send({ type:'move', index, symbol:turn })
     setLastMove(index); setHintIndex(null); setTurn(current => current === 'X' ? 'O' : 'X')
   }
   const showHint = () => {
@@ -70,7 +168,7 @@ export function useGame() {
     else { setBoard(createBoard(size)); setTurn(roundStarter); setThinking(false); setLastMove(null); setHintIndex(null); scoredRef.current = false }
     setGameStarted(true)
   }
-  const status = result?.winner === 'draw' ? 'A strategic draw' : result ? `${names[result.winner]} wins!` : thinking ? `${names[aiSymbol]} is thinking…` : `${names[turn]}'s turn`
+  const status = onlineStatus === 'reconnecting' ? `Connection lost · retry ${Math.min(retryAttempt,5)}/5` : result?.winner === 'draw' ? 'A strategic draw' : result ? `${names[result.winner]} wins!` : thinking ? `${names[aiSymbol]} is thinking…` : `${names[turn]}'s turn`
 
-  return { size, setSize, mode, setMode, difficulty, setDifficulty, playerSymbol, setPlayerSymbol, aiSymbol, names, rename, board, turn, roundStarter, thinking, score, lastMove, hintIndex, result, status, playHumanMove, showHint, resetRound, newMatch }
+  return { size, setSize, mode, setMode, difficulty, setDifficulty, playerSymbol, setPlayerSymbol, aiSymbol, names, rename, board, turn, roundStarter, thinking, score, lastMove, hintIndex, result, status, onlineStatus, retryAttempt, networkQuality, roomCode, hostOnline, joinOnline, readyOnline, playHumanMove, showHint, resetRound, newMatch }
 }

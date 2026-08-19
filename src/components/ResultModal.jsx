@@ -9,7 +9,7 @@ export default function ResultModal({ game, onNewMatch }) {
   const aiWon = mode === 'ai' && result.winner === game.aiSymbol
   const humanWon = mode === 'ai' && result.winner === game.playerSymbol
   const title = draw ? 'Draw!' : aiWon ? 'AI wins' : humanWon ? 'You win!' : `${names[result.winner]} wins!`
-  const copy = draw ? 'Perfectly balanced. Neither side gave an inch.' : aiWon ? 'Nexus found the winning line. Ready for a rematch?' : humanWon ? 'Brilliant strategy. You outplayed the machine.' : `${names[result.winner]} takes this round with a flawless line.`
+  const copy = result.reason === 'disconnect' ? `${names[result.winner]} wins because the other player went offline after five reconnect attempts.` : draw ? 'Perfectly balanced. Neither side gave an inch.' : aiWon ? 'Nexus found the winning line. Ready for a rematch?' : humanWon ? 'Brilliant strategy. You outplayed the machine.' : `${names[result.winner]} takes this round with a flawless line.`
   return <div className="modal-backdrop result-backdrop">
     {!draw && <div className="confetti" aria-hidden="true">{CONFETTI.map((piece, i) => <i key={i} style={{ '--left':piece.left,'--delay':piece.delay,'--duration':piece.duration,'--color':piece.color,'--rotate':piece.rotate }} />)}</div>}
     <section className={`modal-card result-modal glass ${draw ? 'is-draw' : ''}`} role="dialog" aria-modal="true" aria-labelledby="result-title">
