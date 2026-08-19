@@ -2141,7 +2141,14 @@ footer p {
   right: 0;
   bottom: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent 0%, #8b5cf6 22%, #22d3ee 50%, #ec4899 78%, transparent 100%);
-  opacity: 0.65;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(var(--accent-rgb), 0.45) 18%,
+    var(--accent) 50%,
+    rgba(var(--accent-rgb), 0.45) 82%,
+    transparent 100%
+  );
+  box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.3);
   pointer-events: none;
 }

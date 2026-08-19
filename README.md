@@ -42,7 +42,7 @@ For Android builds:
 Clone the repository and install its dependencies:
 
 ```bash
-git clone https://github.com/soumya-webskitters-pal/tic-tac-toe.git
+git clone <repository-url>
 cd tic-tac-toe
 npm install
 ```
