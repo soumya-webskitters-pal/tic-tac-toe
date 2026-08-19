@@ -23,8 +23,10 @@ export function useGame() {
   const [retryAttempt, setRetryAttempt] = useState(0)
   const [networkQuality, setNetworkQuality] = useState('good')
   const [forfeitWinner, setForfeitWinner] = useState(null)
+  const [receivedReaction, setReceivedReaction] = useState(null)
+  const [receivedMessage, setReceivedMessage] = useState(null)
   const scoredRef = useRef(false)
-  const peerRef = useRef(null), connectionRef = useRef(null), boardRef = useRef(board), turnRef = useRef(turn), sizeRef = useRef(size), playerSymbolRef = useRef(playerSymbol), roundStarterRef = useRef(roundStarter), localReadyRef = useRef(false), remoteReadyRef = useRef(false), isHostRef = useRef(false), remotePeerRef = useRef(''), retryTimerRef = useRef(null), retryCountRef = useRef(0), playingRef = useRef(false)
+  const peerRef = useRef(null), connectionRef = useRef(null), boardRef = useRef(board), turnRef = useRef(turn), sizeRef = useRef(size), playerSymbolRef = useRef(playerSymbol), roundStarterRef = useRef(roundStarter), localReadyRef = useRef(false), remoteReadyRef = useRef(false), isHostRef = useRef(false), remotePeerRef = useRef(''), retryTimerRef = useRef(null), retryCountRef = useRef(0), playingRef = useRef(false), resettingOnlineRef = useRef(false), lastMessageAtRef = useRef(0)
   const result = useMemo(() => forfeitWinner ? { winner:forfeitWinner, reason:'disconnect' } : getOutcome(board, size), [board, size, forfeitWinner])
   const aiSymbol = playerSymbol === 'X' ? 'O' : 'X'
   useEffect(() => { boardRef.current=board; turnRef.current=turn; sizeRef.current=size; playerSymbolRef.current=playerSymbol; roundStarterRef.current=roundStarter }, [board,turn,size,playerSymbol,roundStarter])
@@ -36,7 +38,7 @@ export function useGame() {
     setForfeitWinner(navigator.onLine ? local : opponent)
   }
   const reconnect = () => {
-    if (retryTimerRef.current) return
+    if (resettingOnlineRef.current || retryTimerRef.current) return
     setOnlineStatus('reconnecting'); retryCountRef.current=0; setRetryAttempt(0)
     const attempt = () => {
       retryCountRef.current += 1; setRetryAttempt(retryCountRef.current)
@@ -78,11 +80,17 @@ export function useGame() {
         if (localReadyRef.current) { playingRef.current=true; setOnlineStatus('playing') }
       }
       if (data.type === 'sync') { setBoard(data.board); setTurn(data.turn); setSize(data.gridSize); setRoundStarter(data.starter); setOnlineStatus('playing'); playingRef.current=true }
+      if (data.type === 'reaction') setReceivedReaction({ emoji:data.emoji, id:`${Date.now()}-${Math.random()}` })
+      if (data.type === 'chat' && typeof data.text === 'string') {
+        const text=data.text.replace(/[\u0000-\u001F\u007F]/g,'').trim().slice(0,80)
+        if (text) setReceivedMessage({ text, id:`${Date.now()}-${Math.random()}` })
+      }
     })
     connection.on('close', reconnect)
     connection.on('error', reconnect)
   }
   const hostOnline = () => {
+    resettingOnlineRef.current=false
     peerRef.current?.destroy()
     localReadyRef.current=false; remoteReadyRef.current=false; playingRef.current=false; isHostRef.current=true; setForfeitWinner(null)
     const code = `nexus-${Math.random().toString(36).slice(2,8)}`
@@ -93,6 +101,7 @@ export function useGame() {
     peer.on('error', () => setOnlineStatus('error'))
   }
   const joinOnline = code => {
+    resettingOnlineRef.current=false
     const clean=code.trim().toLowerCase(); if (!clean) return
     localReadyRef.current=false; remoteReadyRef.current=false; playingRef.current=false; isHostRef.current=false; setForfeitWinner(null)
     peerRef.current?.destroy(); const peer=new Peer(); peerRef.current=peer; setRoomCode(clean); setOnlineStatus('joining')
@@ -105,6 +114,20 @@ export function useGame() {
     if (remoteReadyRef.current) playingRef.current=true
     setOnlineStatus(remoteReadyRef.current ? 'playing' : 'ready-wait')
   }
+  const sendReaction = emoji => {
+    if (mode === 'online' && onlineStatus === 'playing') connectionRef.current?.send({ type:'reaction', emoji })
+  }
+  const sendChat = value => {
+    const text=String(value).replace(/[\u0000-\u001F\u007F]/g,'').trim().slice(0,80), now=Date.now()
+    if (!text || mode!=='online' || onlineStatus!=='playing' || now-lastMessageAtRef.current<1500) return false
+    lastMessageAtRef.current=now; connectionRef.current?.send({ type:'chat', text }); return true
+  }
+  const resetOnline = () => {
+    resettingOnlineRef.current=true; clearInterval(retryTimerRef.current); retryTimerRef.current=null
+    connectionRef.current?.close(); peerRef.current?.destroy(); connectionRef.current=null; peerRef.current=null
+    localReadyRef.current=false; remoteReadyRef.current=false; playingRef.current=false; remotePeerRef.current=''; retryCountRef.current=0
+    setRoomCode(''); setOnlineStatus('idle'); setRetryAttempt(0); setNetworkQuality('good'); setForfeitWinner(null); setGameStarted(false); setMode('ai')
+  }
 
   useEffect(() => {
     if (mode !== 'online' || onlineStatus !== 'playing') return
@@ -116,6 +139,16 @@ export function useGame() {
     }, 2000)
     return () => clearInterval(timer)
   }, [mode,onlineStatus])
+  useEffect(() => {
+    if (!receivedReaction) return
+    const timer=setTimeout(() => setReceivedReaction(null), 2400)
+    return () => clearTimeout(timer)
+  }, [receivedReaction])
+  useEffect(() => {
+    if (!receivedMessage) return
+    const timer=setTimeout(() => setReceivedMessage(null),4000)
+    return () => clearTimeout(timer)
+  }, [receivedMessage])
 
   const resetRound = useCallback((nextSize = size) => {
     if (mode === 'online' && playerSymbol !== 'X') return
@@ -170,5 +203,5 @@ export function useGame() {
   }
   const status = onlineStatus === 'reconnecting' ? `Connection lost · retry ${Math.min(retryAttempt,5)}/5` : result?.winner === 'draw' ? 'A strategic draw' : result ? `${names[result.winner]} wins!` : thinking ? `${names[aiSymbol]} is thinking…` : `${names[turn]}'s turn`
 
-  return { size, setSize, mode, setMode, difficulty, setDifficulty, playerSymbol, setPlayerSymbol, aiSymbol, names, rename, board, turn, roundStarter, thinking, score, lastMove, hintIndex, result, status, onlineStatus, retryAttempt, networkQuality, roomCode, hostOnline, joinOnline, readyOnline, playHumanMove, showHint, resetRound, newMatch }
+  return { size, setSize, mode, setMode, difficulty, setDifficulty, playerSymbol, setPlayerSymbol, aiSymbol, names, rename, board, turn, roundStarter, thinking, score, lastMove, hintIndex, result, status, onlineStatus, retryAttempt, networkQuality, roomCode, receivedReaction, receivedMessage, hostOnline, joinOnline, readyOnline, resetOnline, sendReaction, sendChat, playHumanMove, showHint, resetRound, newMatch }
 }
