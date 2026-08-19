@@ -10,7 +10,7 @@ export function useGame(localGamingName = 'Alex') {
   const [mode, setMode] = useState('ai')
   const [difficulty, setDifficulty] = useState('hard')
   const [playerSymbol, setPlayerSymbolState] = useState('X')
-  const [names, setNames] = useState({ X: 'Alex', O: 'Nexus AI' })
+  const [names, setNames] = useState({ X: localGamingName, O: 'Nexus AI' })
   const [board, setBoard] = useState(() => createBoard(3))
   const [roundStarter, setRoundStarter] = useState(initialStarter.current)
   const [turn, setTurn] = useState(initialStarter.current)
@@ -174,11 +174,22 @@ export function useGame(localGamingName = 'Alex') {
   useEffect(() => setNames(n => {
     if (mode === 'ai') return {
       ...n,
-      [playerSymbol]: n[playerSymbol] === 'Nexus AI' || n[playerSymbol] === 'Player 2' ? 'Alex' : n[playerSymbol],
-      [aiSymbol]: n[aiSymbol] === 'Player 2' || n[aiSymbol] === 'Alex' ? 'Nexus AI' : n[aiSymbol]
+      [playerSymbol]: localGamingName,
+      [aiSymbol]: 'Nexus AI'
     }
-    return { ...n, [aiSymbol]: n[aiSymbol] === 'Nexus AI' ? 'Player 2' : n[aiSymbol] }
-  }), [mode, playerSymbol, aiSymbol])
+    if (mode === 'pvp') return {
+      ...n,
+      [playerSymbol]: localGamingName,
+      [aiSymbol]: ['Nexus AI',localGamingName].includes(n[aiSymbol]) ? 'Player 2' : n[aiSymbol]
+    }
+    return n
+  }), [mode, playerSymbol, aiSymbol, localGamingName])
+  useEffect(() => {
+    if (mode === 'online' || !peerRef.current) return
+    resettingOnlineRef.current=true; clearInterval(retryTimerRef.current); retryTimerRef.current=null
+    connectionRef.current?.close(); peerRef.current.destroy(); connectionRef.current=null; peerRef.current=null
+    setOnlineStatus('idle'); setRoomCode(''); setRetryAttempt(0); setForfeitWinner(null)
+  }, [mode])
   useEffect(() => {
     if (result && !scoredRef.current) {
       scoredRef.current=true; setScore(s=>({ ...s,[result.winner]:s[result.winner]+1 }))
@@ -223,5 +234,5 @@ export function useGame(localGamingName = 'Alex') {
   }
   const status = onlineStatus === 'reconnecting' ? `Connection lost · retry ${Math.min(retryAttempt,5)}/5` : result?.winner === 'draw' ? 'A strategic draw' : result ? `${names[result.winner]} wins!` : thinking ? `${names[aiSymbol]} is thinking…` : `${names[turn]}'s turn`
 
-  return { size, setSize, mode, setMode, difficulty, setDifficulty, playerSymbol, setPlayerSymbol, aiSymbol, names, rename, board, turn, roundStarter, thinking, score, lastMove, hintIndex, result, status, onlineStatus, retryAttempt, networkQuality, roomCode, receivedReaction, receivedMessage, gameHistory, hostOnline, joinOnline, readyOnline, resetOnline, exitOnline, sendReaction, sendChat, playHumanMove, showHint, resetRound, newMatch }
+  return { size, setSize, mode, setMode, difficulty, setDifficulty, playerSymbol, setPlayerSymbol, aiSymbol, names, rename, board, turn, roundStarter, gameStarted, thinking, score, lastMove, hintIndex, result, status, onlineStatus, retryAttempt, networkQuality, roomCode, receivedReaction, receivedMessage, gameHistory, hostOnline, joinOnline, readyOnline, resetOnline, exitOnline, sendReaction, sendChat, playHumanMove, showHint, resetRound, newMatch }
 }

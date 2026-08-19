@@ -18,7 +18,7 @@ export default function ResultModal({ game, onNewMatch }) {
       <div className="modal-kicker">{draw ? 'ROUND COMPLETE' : 'VICTORY CONFIRMED'}</div>
       <h2 id="result-title">{title}</h2><p className="modal-copy">{copy}</p>
       <div className="result-score"><span>{names.X}<b>{game.score.X}</b></span><i>—</i><span><b>{game.score.O}</b>{names.O}</span></div>
-      {opponentQuit ? <button className="result-primary" onClick={game.resetOnline}>EXIT <span>→</span></button> : <button className="result-primary" onClick={() => resetRound()}>PLAY NEXT ROUND <span>→</span></button>}
+      {opponentQuit ? <button className="result-primary" onClick={() => { game.resetOnline(); onNewMatch() }}>EXIT <span>→</span></button> : <button className="result-primary" onClick={() => resetRound()}>PLAY NEXT ROUND <span>→</span></button>}
       {!opponentQuit && <button className="result-secondary" onClick={onNewMatch}>⚙ NEW MATCH & SETTINGS</button>}
     </section>
   </div>
