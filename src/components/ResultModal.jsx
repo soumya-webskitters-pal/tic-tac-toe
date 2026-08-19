@@ -6,8 +6,8 @@ export default function ResultModal({ game, onNewMatch }) {
   const { result, mode, names, resetRound } = game
   if (!result) return null
   const draw = result.winner === 'draw'
-  const aiWon = mode === 'ai' && result.winner === 'O'
-  const humanWon = mode === 'ai' && result.winner === 'X'
+  const aiWon = mode === 'ai' && result.winner === game.aiSymbol
+  const humanWon = mode === 'ai' && result.winner === game.playerSymbol
   const title = draw ? 'Draw!' : aiWon ? 'AI wins' : humanWon ? 'You win!' : `${names[result.winner]} wins!`
   const copy = draw ? 'Perfectly balanced. Neither side gave an inch.' : aiWon ? 'Nexus found the winning line. Ready for a rematch?' : humanWon ? 'Brilliant strategy. You outplayed the machine.' : `${names[result.winner]} takes this round with a flawless line.`
   return <div className="modal-backdrop result-backdrop">

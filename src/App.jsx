@@ -11,7 +11,7 @@ import { useGame } from './hooks/useGame'
 export default function App() {
   const game = useGame()
   const [theme, setTheme] = useState(THEMES[0])
-  const [setupOpen, setSetupOpen] = useState(false)
+  const [setupOpen, setSetupOpen] = useState(true)
   const [showResult, setShowResult] = useState(false)
 
   useEffect(() => {
