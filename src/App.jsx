@@ -22,7 +22,7 @@ export default function App() {
   const [profileOpen,setProfileOpen]=useState(false)
   const [legalPage,setLegalPage]=useState(null)
   const [analyticsReady,setAnalyticsReady]=useState(()=>getAnalyticsConsent()==='granted')
-  const [soundEnabled,setSoundEnabled]=useState(()=>localStorage.getItem('nexus-sound-enabled')!=='false')
+  const [soundEnabled,setSoundEnabled]=useState(()=>localStorage.getItem('nexus-sound-enabled')==='true')
   const [musicVolume,setMusicVolume]=useState(()=>Number(localStorage.getItem('nexus-music-volume')??0.35))
   const [sfxVolume,setSfxVolume]=useState(()=>Number(localStorage.getItem('nexus-sfx-volume')??0.7))
   const musicRef=useRef(null),clickRef=useRef(null),placementRef=useRef(null),previousBoardRef=useRef(''),soundEnabledRef=useRef(soundEnabled)
